@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>中国亲戚关系计算器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/relationship.js@1.2.9/dist/relationship.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            aurora: { DEFAULT: '#06b6d4', hover: '#0891b2', glow: '#22d3ee' },
+          },
+          fontFamily: { sans: ['"Noto Sans SC"', 'Inter', 'system-ui', 'sans-serif'] },
+          boxShadow: {
+            glow: '0 0 24px rgba(6, 182, 212, 0.18)',
+            card: '0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03)',
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Noto Sans SC', 'Inter', system-ui, sans-serif; }
+
+    .bg-mesh {
+      background-color: #f8fafc;
+      background-image:
+        radial-gradient(at 20% 20%, rgba(6, 182, 212, 0.08) 0, transparent 50%),
+        radial-gradient(at 80% 10%, rgba(99, 102, 241, 0.07) 0, transparent 45%),
+        radial-gradient(at 60% 90%, rgba(14, 165, 233, 0.06) 0, transparent 50%);
+    }
+
+    .radio-pill input { position: absolute; opacity: 0; pointer-events: none; }
+    .radio-pill label {
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    .radio-pill input:checked + label {
+      background: linear-gradient(135deg, #06b6d4, #6366f1);
+      color: white;
+      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.35);
+    }
+
+    .rel-btn {
+      transition: all 0.15s ease;
+    }
+    .rel-btn:not(:disabled):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(6, 182, 212, 0.15);
+    }
+    .rel-btn:not(:disabled):active { transform: translateY(0); }
+    .rel-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .tier-label {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+    }
+
+    #result-area.has-result {
+      border-color: rgba(6, 182, 212, 0.3);
+      box-shadow: 0 0 32px rgba(6, 182, 212, 0.12);
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fade-up 0.3s ease forwards; }
+  </style>
+</head>
+<body class="bg-mesh min-h-screen text-slate-800 antialiased">
+
+  <div class="max-w-xl mx-auto px-4 py-10 sm:py-14">
+    <!-- Header -->
+    <header class="text-center mb-10">
+      <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white border border-slate-100 shadow-card mb-4">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#grad)" stroke-width="1.5">
+          <defs>
+            <linearGradient id="grad" x1="0" y1="0" x2="24" y2="24">
+              <stop offset="0%" stop-color="#06b6d4"/>
+              <stop offset="100%" stop-color="#6366f1"/>
+            </linearGradient>
+          </defs>
+          <circle cx="12" cy="6" r="3"/>
+          <path d="M5 20c0-3.866 3.134-7 7-7s7 3.134 7 7"/>
+          <circle cx="5" cy="10" r="2" opacity="0.5"/>
+          <circle cx="19" cy="10" r="2" opacity="0.5"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl sm:text-3xl font-semibold tracking-wide text-slate-800">亲戚关系计算器</h1>
+      <p class="mt-2 text-sm text-slate-500 tracking-wide">输入关系链或称呼，一键推算称谓与血缘关系</p>
+    </header>
+
+    <!-- Config Card -->
+    <section class="bg-white/80 backdrop-blur-sm border border-slate-100 rounded-2xl shadow-card p-5 sm:p-6 mb-4">
+      <h2 class="tier-label font-semibold uppercase text-slate-400 mb-4">基础配置</h2>
+
+      <!-- 计算类型 -->
+      <div class="mb-5">
+        <p class="text-xs text-slate-500 mb-2 tracking-wide">计算类型</p>
+        <div class="radio-pill flex flex-wrap gap-2">
+          <div>
+            <input type="radio" name="type" id="type-default" value="default" checked>
+            <label for="type-default" class="inline-block px-4 py-2 rounded-xl text-sm font-medium bg-slate-50 text-slate-600 border border-slate-100">找称呼</label>
+          </div>
+          <div>
+            <input type="radio" name="type" id="type-chain" value="chain">
+            <label for="type-chain" class="inline-block px-4 py-2 rounded-xl text-sm font-medium bg-slate-50 text-slate-600 border border-slate-100">找关系</label>
+          </div>
+        </div>
+        <p id="type-hint" class="mt-2 text-[11px] text-slate-400 tracking-wide">输入关系链（如：爸爸的哥哥），输出对应称呼</p>
+      </div>
+
+      <!-- 我的性别 -->
+      <div class="mb-5">
+        <p class="text-xs text-slate-500 mb-2 tracking-wide">我的性别</p>
+        <div class="radio-pill flex gap-2">
+          <div>
+            <input type="radio" name="gender" id="gender-male" value="1" checked>
+            <label for="gender-male" class="inline-block px-4 py-2 rounded-xl text-sm font-medium bg-slate-50 text-slate-600 border border-slate-100">男</label>
+          </div>
+          <div>
+            <input type="radio" name="gender" id="gender-female" value="0">
+            <label for="gender-female" class="inline-block px-4 py-2 rounded-xl text-sm font-medium bg-slate-50 text-slate-600 border border-slate-100">女</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 称呼方式 -->
+      <div>
+        <p class="text-xs text-slate-500 mb-2 tracking-wide">称呼方式</p>
+        <div class="radio-pill flex flex-wrap gap-2">
+          <div>
+            <input type="radio" name="direction" id="dir-forward" value="false" checked>
+            <label for="dir-forward" class="inline-block px-4 py-2 rounded-xl text-sm font-medium bg-slate-50 text-slate-600 border border-slate-100">我称呼对方</label>
+          </div>
+          <div>
+            <input type="radio" name="direction" id="dir-reverse" value="true">
+            <label for="dir-reverse" class="inline-block px-4 py-2 rounded-xl text-sm font-medium bg-slate-50 text-slate-600 border border-slate-100">对方称呼我</label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Input Card -->
+    <section class="bg-white/80 backdrop-blur-sm border border-slate-100 rounded-2xl shadow-card p-5 sm:p-6 mb-4">
+      <h2 class="tier-label font-semibold uppercase text-slate-400 mb-4">输入</h2>
+
+      <div class="relative mb-4">
+        <input
+          type="text"
+          id="input-display"
+          readonly
+          placeholder="点击下方按钮构建关系链，或直接输入…"
+          class="w-full px-4 py-3.5 bg-slate-50/80 border border-slate-100 rounded-xl text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100 transition-all tracking-wide"
+        >
+        <span id="input-mode-badge" class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium uppercase tracking-widest text-cyan-600/70 bg-cyan-50 px-2 py-0.5 rounded-md">关系链</span>
+      </div>
+
+      <!-- Chain builder (找称呼) -->
+      <div id="chain-builder">
+        <div class="mb-3">
+          <p class="tier-label text-slate-400 mb-2">长辈</p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" data-rel="父" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">父</button>
+            <button type="button" data-rel="母" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">母</button>
+          </div>
+        </div>
+        <div class="mb-3">
+          <p class="tier-label text-slate-400 mb-2">配偶</p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" id="btn-husband" data-rel="夫" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">夫</button>
+            <button type="button" id="btn-wife" data-rel="妻" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">妻</button>
+          </div>
+        </div>
+        <div class="mb-3">
+          <p class="tier-label text-slate-400 mb-2">晚辈</p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" data-rel="子" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">子</button>
+            <button type="button" data-rel="女" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">女</button>
+          </div>
+        </div>
+        <div class="mb-4">
+          <p class="tier-label text-slate-400 mb-2">同辈</p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" data-rel="兄" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">兄</button>
+            <button type="button" data-rel="弟" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">弟</button>
+            <button type="button" data-rel="姐" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">姐</button>
+            <button type="button" data-rel="妹" class="rel-btn px-4 py-2 bg-white border border-slate-100 rounded-xl text-sm font-medium text-slate-700 hover:border-cyan-200 hover:text-cyan-700">妹</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-50">
+        <button type="button" id="btn-backspace" class="rel-btn flex-1 min-w-[80px] px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">
+          <span class="inline-flex items-center gap-1.5 justify-center">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4M5 10h11a4 4 0 010 8h-1"/></svg>
+            回退
+          </span>
+        </button>
+        <button type="button" id="btn-clear" class="rel-btn flex-1 min-w-[80px] px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">清空</button>
+        <button type="button" id="btn-calculate" class="rel-btn flex-[1.5] min-w-[120px] px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-indigo-500 text-white rounded-xl text-sm font-semibold tracking-wide shadow-glow hover:shadow-lg hover:from-cyan-400 hover:to-indigo-400">
+          计算
+        </button>
+      </div>
+    </section>
+
+    <!-- Output Card -->
+    <section id="result-area" class="bg-white/80 backdrop-blur-sm border border-slate-100 rounded-2xl shadow-card p-5 sm:p-6 transition-all duration-300">
+      <h2 class="tier-label font-semibold uppercase text-slate-400 mb-3">结果</h2>
+      <div id="result-content" class="min-h-[3rem] flex items-center">
+        <p class="text-sm text-slate-400 tracking-wide">点击「计算」查看结果</p>
+      </div>
+      <p id="result-meta" class="hidden mt-3 text-[11px] text-slate-400 tracking-wide border-t border-slate-50 pt-3"></p>
+    </section>
+
+    <footer class="text-center mt-8 text-[11px] text-slate-400 tracking-wide">
+      算法基于 <a href="https://github.com/mumuy/relationship" class="text-cyan-600 hover:underline" target="_blank" rel="noopener">relationship.js</a>
+    </footer>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  const state = {
+    type: 'default',
+    sex: 1,
+    reverse: false,
+    chain: [],
+    titleText: '',
+  };
+
+  const inputDisplay = document.getElementById('input-display');
+  const chainBuilder = document.getElementById('chain-builder');
+  const resultArea = document.getElementById('result-area');
+  const resultContent = document.getElementById('result-content');
+  const resultMeta = document.getElementById('result-meta');
+  const typeHint = document.getElementById('type-hint');
+  const inputModeBadge = document.getElementById('input-mode-badge');
+  const btnHusband = document.getElementById('btn-husband');
+  const btnWife = document.getElementById('btn-wife');
+
+  function isChainMode() {
+    return state.type === 'default';
+  }
+
+  function getInputText() {
+    return isChainMode() ? state.chain.join('的') : state.titleText.trim();
+  }
+
+  function syncInputDisplay() {
+    if (isChainMode()) {
+      inputDisplay.value = state.chain.join('的');
+      inputDisplay.readOnly = false;
+      inputDisplay.placeholder = '点击下方按钮构建，或直接输入关系链…';
+      inputModeBadge.textContent = '关系链';
+    } else {
+      inputDisplay.value = state.titleText;
+      inputDisplay.readOnly = false;
+      inputDisplay.placeholder = '输入称呼，如：舅舅、七舅姥爷…';
+      inputModeBadge.textContent = '称呼';
+    }
+  }
+
+  function parseChainFromInput(raw) {
+    return raw.split('的').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  function updateSpouseButtons() {
+    btnHusband.disabled = state.sex === 1;
+    btnWife.disabled = state.sex === 0;
+  }
+
+  function updateModeUI() {
+    const chainMode = isChainMode();
+    chainBuilder.classList.toggle('hidden', !chainMode);
+    document.getElementById('btn-backspace').classList.toggle('hidden', !chainMode);
+    typeHint.textContent = chainMode
+      ? '输入关系链（如：爸爸的哥哥），输出对应称呼'
+      : '输入称呼（如：舅舅），输出你们之间的血缘关系链';
+    syncInputDisplay();
+    updateSpouseButtons();
+  }
+
+  function appendNode(node) {
+    if (!isChainMode()) return;
+    state.chain.push(node);
+    syncInputDisplay();
+    clearResult();
+  }
+
+  function backspace() {
+    if (!isChainMode()) return;
+    state.chain.pop();
+    syncInputDisplay();
+    clearResult();
+  }
+
+  function clearAll() {
+    state.chain = [];
+    state.titleText = '';
+    syncInputDisplay();
+    clearResult();
+  }
+
+  function clearResult() {
+    resultArea.classList.remove('has-result');
+    resultContent.innerHTML = '<p class="text-sm text-slate-400 tracking-wide">点击「计算」查看结果</p>';
+    resultMeta.classList.add('hidden');
+  }
+
+  function calculate() {
+    const text = getInputText();
+    if (!text) {
+      showError('请先输入内容');
+      return;
+    }
+
+    if (typeof relationship !== 'function') {
+      showError('计算引擎加载失败，请刷新页面重试');
+      return;
+    }
+
+    const options = {
+      text,
+      sex: state.sex,
+      type: state.type,
+      reverse: state.reverse,
+    };
+
+    let results;
+    try {
+      results = relationship(options);
+    } catch (err) {
+      showError('计算出错，请检查输入');
+      return;
+    }
+
+    if (!results || !results.length) {
+      showError('未找到匹配结果，请检查输入是否正确');
+      return;
+    }
+
+    const genderLabel = state.sex === 1 ? '男' : '女';
+    const directionLabel = state.reverse ? '对方称呼我' : '我称呼对方';
+    const typeLabel = isChainMode() ? '找称呼' : '找关系';
+
+    resultArea.classList.add('has-result');
+    resultContent.innerHTML = results.map(function (r, i) {
+      return '<span class="fade-up inline-block text-xl sm:text-2xl font-semibold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-indigo-600' +
+        (i > 0 ? ' mt-2' : '') + '">' + escapeHtml(r) + '</span>';
+    }).join('<span class="text-slate-300 mx-2">/</span>');
+
+    resultMeta.textContent = typeLabel + ' · ' + genderLabel + ' · ' + directionLabel +
+      (results.length > 1 ? ' · 共 ' + results.length + ' 种可能' : '');
+    resultMeta.classList.remove('hidden');
+  }
+
+  function showError(msg) {
+    resultArea.classList.remove('has-result');
+    resultContent.innerHTML = '<p class="text-sm text-rose-500 tracking-wide">' + escapeHtml(msg) + '</p>';
+    resultMeta.classList.add('hidden');
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Events ────────────────────────────────────────────────────────
+  document.querySelectorAll('input[name="type"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      state.type = radio.value;
+      updateModeUI();
+      clearResult();
+    });
+  });
+
+  document.querySelectorAll('input[name="gender"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      state.sex = parseInt(radio.value, 10);
+      updateSpouseButtons();
+      clearResult();
+    });
+  });
+
+  document.querySelectorAll('input[name="direction"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      state.reverse = radio.value === 'true';
+      clearResult();
+    });
+  });
+
+  chainBuilder.querySelectorAll('[data-rel]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      appendNode(btn.dataset.rel);
+    });
+  });
+
+  inputDisplay.addEventListener('input', function () {
+    if (isChainMode()) {
+      state.chain = parseChainFromInput(inputDisplay.value);
+    } else {
+      state.titleText = inputDisplay.value;
+    }
+    clearResult();
+  });
+
+  document.getElementById('btn-backspace').addEventListener('click', backspace);
+  document.getElementById('btn-clear').addEventListener('click', clearAll);
+  document.getElementById('btn-calculate').addEventListener('click', calculate);
+
+  inputDisplay.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') calculate();
+    if (e.key === 'Backspace' && isChainMode()) {
+      e.preventDefault();
+      backspace();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') clearAll();
+  });
+
+  updateModeUI();
+})();
+</script>
+</body>
+</html>
